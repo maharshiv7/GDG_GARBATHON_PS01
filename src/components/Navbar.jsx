@@ -1,7 +1,19 @@
 import React from 'react';
-import { Sparkles, MapPin, Database, ShieldCheck, PhoneCall, Building2 } from 'lucide-react';
+import { 
+  Sparkles, 
+  MapPin, 
+  Database, 
+  ShieldCheck, 
+  User, 
+  LogOut, 
+  RefreshCw, 
+  Building2, 
+  SlidersHorizontal 
+} from 'lucide-react';
 
-export default function Navbar({ onResetDemo }) {
+export default function Navbar({ currentUser, onSwitchRole, onLogout, onResetDemo }) {
+  const isAdmin = currentUser?.role === 'admin';
+
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -21,8 +33,12 @@ export default function Navbar({ onResetDemo }) {
                 <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
                   <span>AMC CivicPulse</span>
                   <span className="text-slate-400 font-light hidden sm:inline">—</span>
-                  <span className="text-xs sm:text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-md hidden md:inline">
-                    AI Grievance & Ward Routing Agent
+                  <span className={`text-xs sm:text-sm font-semibold px-2 py-0.5 rounded-md hidden md:inline border ${
+                    isAdmin 
+                      ? 'bg-amber-50 text-amber-800 border-amber-200'
+                      : 'bg-blue-50 text-blue-700 border-blue-200/80'
+                  }`}>
+                    {isAdmin ? 'Admin Console & Triage' : 'Citizen Grievance & Area Monitor'}
                   </span>
                 </h1>
               </div>
@@ -39,50 +55,74 @@ export default function Navbar({ onResetDemo }) {
             </div>
           </div>
 
-          {/* Right Badges: Gemini 4 Argon, Google Maps Geocoding, Firebase */}
-          <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Right Section: Role Status, Switcher, Badges, Logout */}
+          <div className="flex items-center gap-2 sm:gap-3">
             
-            {/* Gemini 4 Argon Badge */}
+            {/* User Profile & Role Pill */}
+            {currentUser && (
+              <div className="flex items-center gap-2 pl-2">
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all ${
+                  isAdmin 
+                    ? 'bg-amber-50/90 border-amber-200 text-amber-900' 
+                    : 'bg-blue-50/90 border-blue-200 text-blue-900'
+                }`}>
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white shadow-xs ${
+                    isAdmin ? 'bg-amber-600' : 'bg-blue-600'
+                  }`}>
+                    {isAdmin ? <ShieldCheck className="w-4 h-4" /> : <User className="w-4 h-4" />}
+                  </div>
+                  <div className="hidden sm:block text-left">
+                    <div className="flex items-center gap-1.5 leading-none">
+                      <span className="text-xs font-bold truncate max-w-[140px]">{currentUser.name}</span>
+                      <span className={`text-[10px] font-extrabold uppercase px-1.5 py-0.2 rounded ${
+                        isAdmin ? 'bg-amber-200/80 text-amber-900' : 'bg-blue-200/80 text-blue-900'
+                      }`}>
+                        {isAdmin ? 'ADMIN' : 'CITIZEN'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      {isAdmin ? 'Full Privileges' : 'Area Status & Uploads'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Switch Role Fast-Toggle */}
+                {onSwitchRole && (
+                  <button
+                    onClick={onSwitchRole}
+                    title={isAdmin ? "Switch to Citizen view" : "Switch to Admin view"}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-slate-600" />
+                    <span className="hidden md:inline">
+                      Switch to {isAdmin ? 'Citizen' : 'Admin'}
+                    </span>
+                  </button>
+                )}
+
+                {/* Logout Button */}
+                {onLogout && (
+                  <button
+                    onClick={onLogout}
+                    title="Sign out to Login screen"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200 hover:border-rose-200 transition-colors"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span className="hidden lg:inline">Logout</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* AI Agent Badge */}
             <div 
-              title="LLM Multimodal Defect Classifier & Reasoning Agent"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-slate-50 hover:bg-slate-100/80 border border-slate-200 text-slate-700 text-xs font-medium shadow-xs transition-colors"
+              title="Gemini 4 Argon AI Classifier"
+              className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium shadow-xs"
             >
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
               <Sparkles className="w-3.5 h-3.5 text-blue-600" />
               <span className="font-semibold text-slate-800">Gemini 4 Argon</span>
-              <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.2 rounded hidden lg:inline">AI Vision</span>
             </div>
-
-            {/* Google Maps Geocoding Badge */}
-            <div 
-              title="Reverse Geocoding & AMC GIS Ward Boundary Locator"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-slate-50 hover:bg-slate-100/80 border border-slate-200 text-slate-700 text-xs font-medium shadow-xs transition-colors"
-            >
-              <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-              <MapPin className="w-3.5 h-3.5 text-rose-500" />
-              <span className="font-semibold text-slate-800">Google Maps Geocoding</span>
-              <span className="text-[10px] bg-rose-50 text-rose-700 border border-rose-200 font-medium px-1.5 py-0.2 rounded hidden xl:inline">GIS Ward</span>
-            </div>
-
-            {/* Firebase Badge */}
-            <div 
-              title="Real-Time Civic Database & Citizen Notification Gateway"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-slate-50 hover:bg-slate-100/80 border border-slate-200 text-slate-700 text-xs font-medium shadow-xs transition-colors"
-            >
-              <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-              <Database className="w-3.5 h-3.5 text-amber-500" />
-              <span className="font-semibold text-slate-800">Firebase</span>
-              <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 font-medium px-1.5 py-0.2 rounded hidden sm:inline">Sync Active</span>
-            </div>
-
-            {/* Helpline / Support */}
-            <a 
-              href="tel:155303" 
-              className="hidden 2xl:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100/80 border border-blue-200 text-xs font-semibold transition-colors"
-            >
-              <PhoneCall className="w-3.5 h-3.5" />
-              <span>AMC Helpline: 155303</span>
-            </a>
 
           </div>
 

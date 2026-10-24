@@ -4,12 +4,26 @@ import CitizenChat from './components/CitizenChat';
 import AgentToolTrace from './components/AgentToolTrace';
 import CivicPortalTable from './components/CivicPortalTable';
 import SocialEscalationDraft from './components/SocialEscalationDraft';
+import AreaSituationView from './components/AreaSituationView';
+import LoginPage from './components/LoginPage';
 import initialAmcData from './amcData.json';
 import { runCivicAgent } from './geminiAgent';
 import { PRESET_DEFECTS, AMC_WARDS } from './data/mockData';
-import { Database, Share2, Building2 } from 'lucide-react';
+import { 
+  Database, 
+  Share2, 
+  Building2, 
+  MapPin, 
+  ShieldCheck, 
+  Lock, 
+  Camera, 
+  Sparkles, 
+  CheckCircle2, 
+  Clock 
+} from 'lucide-react';
 
 const STORAGE_KEY = 'amc_civicpulse_db_state_v1';
+const AUTH_KEY = 'amc_civicpulse_auth_user_v1';
 
 // 1. Initialize complaints table state from amcData.json (and sync updates to localStorage)
 const getInitialDbState = () => {
@@ -25,6 +39,19 @@ const getInitialDbState = () => {
     console.warn('Could not read dbState from localStorage, using amcData.json:', err);
   }
   return initialAmcData;
+};
+
+// 2. Initialize current logged-in user from localStorage (null = show Login Page)
+const getInitialAuthUser = () => {
+  try {
+    const saved = localStorage.getItem(AUTH_KEY);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (err) {
+    console.warn('Could not read auth user:', err);
+  }
+  return null;
 };
 
 const INITIAL_TOOL_STEPS = [
@@ -112,7 +139,10 @@ const INITIAL_CHAT = [
 ];
 
 export default function App() {
-  // 1. Complaints state initialized from amcData.json
+  // Authentication State
+  const [currentUser, setCurrentUser] = useState(getInitialAuthUser);
+
+  // Complaints state initialized from amcData.json
   const [dbState, setDbState] = useState(getInitialDbState);
 
   // Sync to localStorage
@@ -131,7 +161,7 @@ export default function App() {
   const [selectedLocality, setSelectedLocality] = useState('Navrangpura');
   const [activeDefect, setActiveDefect] = useState(PRESET_DEFECTS[0]);
 
-  // 2. Base64 string & mimeType state
+  // Base64 string & mimeType state
   const [imageBase64, setImageBase64] = useState(null);
   const [mimeType, setMimeType] = useState('image/jpeg');
   const [imagePreview, setImagePreview] = useState('/assets/pothole.jpg');
@@ -158,18 +188,95 @@ export default function App() {
     primeDefault();
   }, []);
 
-  // Right Column Bottom Tab ('portal' or 'social')
-  const [activeTab, setActiveTab] = useState('portal');
+  // Right Column Tab:
+  // For User (Citizen): 'area' (Know situation of areas) or 'portal' (Track civic dockets)
+  // For Admin: 'portal', 'social', 'area'
+  const [activeTab, setActiveTab] = useState(() => {
+    const user = getInitialAuthUser();
+    return user?.role === 'admin' ? 'portal' : 'area';
+  });
 
   // Active Ticket for social draft & detail view
   const [currentSelectedTicket, setCurrentSelectedTicket] = useState(
     () => dbState.complaints[0] || initialAmcData.complaints[0]
   );
 
-  // 4. Agent Tool Trace State
+  // Agent Tool Trace State
   const [isExecuting, setIsExecuting] = useState(false);
   const [activeStepIndex, setActiveStepIndex] = useState(-1);
   const [toolSteps, setToolSteps] = useState(INITIAL_TOOL_STEPS);
+
+  const isAdmin = currentUser?.role === 'admin';
+
+  // Handle Login
+  const handleLogin = (user) => {
+    setCurrentUser(user);
+    try {
+      localStorage.setItem(AUTH_KEY, JSON.stringify(user));
+    } catch (e) {
+      console.error('Could not save auth user:', e);
+    }
+    // Set appropriate starting tab based on role
+    if (user.role === 'admin') {
+      setActiveTab('portal');
+    } else {
+      setActiveTab('area');
+    }
+  };
+
+  // Handle Logout
+  const handleLogout = () => {
+    setCurrentUser(null);
+    try {
+      localStorage.removeItem(AUTH_KEY);
+    } catch (e) {
+      console.error('Could not remove auth user:', e);
+    }
+  };
+
+  // Switch Role
+  const handleSwitchRole = () => {
+    if (isAdmin) {
+      handleLogin({
+        role: 'user',
+        name: 'Aarav Mehta (Citizen)',
+        email: 'aarav.mehta@ahmedabad.in',
+        locality: 'Navrangpura',
+        ward: 'W12',
+        badge: 'Citizen User'
+      });
+    } else {
+      handleLogin({
+        role: 'admin',
+        name: 'Dr. Hardik Shah, IAS',
+        title: 'Municipal Commissioner & Admin',
+        email: 'commissioner@ahmedabadcity.gov.in',
+        department: 'AMC Central Administrative Secretariat',
+        badge: 'AMC Municipal Admin'
+      });
+    }
+  };
+
+  // Update Ticket Status (Admin capability)
+  const handleUpdateTicketStatus = (ticketId, newStatus, resolutionNotes) => {
+    setDbState((prev) => {
+      const updatedComplaints = prev.complaints.map((c) => {
+        const match = (c.trackingId || c.id)?.toLowerCase() === ticketId?.toLowerCase();
+        if (match) {
+          return {
+            ...c,
+            status: newStatus,
+            resolutionNotes: resolutionNotes || c.resolutionNotes || `Status updated to ${newStatus} by AMC Admin`,
+          };
+        }
+        return c;
+      });
+      return {
+        ...prev,
+        complaints: updatedComplaints,
+      };
+    });
+  };
 
   // onToolStep callback wired directly to Right Column's 4-Step Live Agent Tool-Call Trace
   const handleToolStep = ({ name, status, input, output }) => {
@@ -214,7 +321,7 @@ export default function App() {
       return copy;
     });
 
-    // 5. Whenever create_amc_complaint finishes, automatically update the Social Media Escalation Draft tab
+    // Update Social Media Escalation Draft when new complaint is created
     if (name === 'create_amc_complaint' && status === 'completed' && output) {
       const newEscalationTicket = {
         trackingId: output.trackingId,
@@ -232,7 +339,7 @@ export default function App() {
     }
   };
 
-  // 3. Run civic agent when user submits complaint or queries status
+  // Run civic agent
   const executeCivicAgent = async (promptOverride = null) => {
     setIsExecuting(true);
 
@@ -327,16 +434,27 @@ export default function App() {
     }
   };
 
+  // If user is not logged in, show LoginPage
+  if (!currentUser) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
       {/* Top Navbar */}
-      <Navbar onResetDemo={handleResetDemo} />
+      <Navbar 
+        currentUser={currentUser}
+        onSwitchRole={handleSwitchRole}
+        onLogout={handleLogout}
+        onResetDemo={handleResetDemo} 
+      />
 
       {/* Main Container: 2-Column Responsive Layout */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
           {/* ================= LEFT COLUMN: Citizen Complaint & Status Chat (5 cols) ================= */}
+          {/* Available to both Citizen and Admin (for issue uploadation and live reporting) */}
           <div className="lg:col-span-5 flex flex-col min-h-[760px]">
             <CitizenChat
               chatMessages={chatMessages}
@@ -362,24 +480,94 @@ export default function App() {
             />
           </div>
 
-          {/* ================= RIGHT COLUMN: Tool-Call Trace + Tabbed Civic View (7 cols) ================= */}
+          {/* ================= RIGHT COLUMN: Role-Based Content (7 cols) ================= */}
           <div className="lg:col-span-7 space-y-6 flex flex-col">
             
-            {/* Right Column Top: Live Agent Tool-Call Trace Card */}
-            <AgentToolTrace
-              steps={toolSteps}
-              activeStepIndex={activeStepIndex}
-              isExecuting={isExecuting}
-              onRunSimulation={() => executeCivicAgent()}
-            />
+            {/* Top Card for Admin: Live Agent Tool-Call Trace */}
+            {isAdmin ? (
+              <AgentToolTrace
+                steps={toolSteps}
+                activeStepIndex={activeStepIndex}
+                isExecuting={isExecuting}
+                onRunSimulation={() => executeCivicAgent()}
+              />
+            ) : (
+              /* Top Card for Citizen: Issue Upload & Area Safety Overview Banner */
+              <div className="bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 rounded-xl p-5 text-white shadow-sm border border-blue-600/30">
+                <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-blue-200">
+                      Citizen Portal Dashboard
+                    </span>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-white/10 border border-white/20 text-white">
+                    Logged in as: {currentUser.name}
+                  </span>
+                </div>
 
-            {/* Right Column Bottom: Tabbed Civic View Card */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-4 text-xs">
+                  <div className="bg-white/10 rounded-lg p-3 border border-white/10">
+                    <div className="flex items-center gap-2 font-bold text-white mb-1">
+                      <Camera className="w-4 h-4 text-amber-300" />
+                      <span>Issue Upload</span>
+                    </div>
+                    <p className="text-[11px] text-blue-100">
+                      Upload photo & select locality on the left to file an official grievance.
+                    </p>
+                  </div>
+
+                  <div className="bg-white/10 rounded-lg p-3 border border-white/10">
+                    <div className="flex items-center gap-2 font-bold text-white mb-1">
+                      <MapPin className="w-4 h-4 text-rose-300" />
+                      <span>Area Situation</span>
+                    </div>
+                    <p className="text-[11px] text-blue-100">
+                      Check real-time road conditions, waterlogging & clean index below.
+                    </p>
+                  </div>
+
+                  <div className="bg-white/10 rounded-lg p-3 border border-white/10">
+                    <div className="flex items-center gap-2 font-bold text-white mb-1">
+                      <Clock className="w-4 h-4 text-emerald-300" />
+                      <span>24h AMC SLA</span>
+                    </div>
+                    <p className="text-[11px] text-blue-100">
+                      Automated routing to responsible AMC Ward Officer & prompt tracking.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Bottom Card: Role-Aware Tabbed Views */}
             <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-5 flex-1 flex flex-col">
               
               {/* Tab Header Selector */}
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
-                <div className="flex items-center space-x-2">
-                  {/* Tab 1: Live AMC Portal Database */}
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4 flex-wrap gap-2">
+                <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+                  
+                  {/* Tab: Know Situation of Areas (Primary for Citizen, available to Admin) */}
+                  <button
+                    onClick={() => setActiveTab('area')}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
+                      activeTab === 'area'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    <MapPin className="w-4 h-4 text-rose-500" />
+                    <span>Know Situation of Areas</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                        activeTab === 'area' ? 'bg-blue-700 text-white' : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {AMC_WARDS.length} Wards
+                    </span>
+                  </button>
+
+                  {/* Tab: Live AMC Portal Database / Docket Tracker */}
                   <button
                     onClick={() => setActiveTab('portal')}
                     className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
@@ -389,7 +577,7 @@ export default function App() {
                     }`}
                   >
                     <Database className="w-4 h-4" />
-                    <span>Live AMC Portal Database</span>
+                    <span>{isAdmin ? 'AMC Central Portal (CRM)' : 'Track Community Dockets'}</span>
                     <span
                       className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                         activeTab === 'portal' ? 'bg-blue-700 text-white' : 'bg-slate-200 text-slate-700'
@@ -399,25 +587,36 @@ export default function App() {
                     </span>
                   </button>
 
-                  {/* Tab 2: Social Media Escalation Draft */}
-                  <button
-                    onClick={() => setActiveTab('social')}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
-                      activeTab === 'social'
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                    }`}
-                  >
-                    <Share2 className="w-4 h-4" />
-                    <span>Social Media Escalation Draft</span>
-                    <span
-                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-semibold ${
-                        activeTab === 'social' ? 'bg-blue-700 text-white' : 'bg-slate-200 text-slate-700'
+                  {/* Tab: Social Media Escalation Draft (ADMIN ONLY) */}
+                  {isAdmin ? (
+                    <button
+                      onClick={() => setActiveTab('social')}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
+                        activeTab === 'social'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                       }`}
                     >
-                      𝕏 / IG
-                    </span>
-                  </button>
+                      <Share2 className="w-4 h-4" />
+                      <span>Social Media Escalation Draft</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-semibold ${
+                          activeTab === 'social' ? 'bg-blue-700 text-white' : 'bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        𝕏 / IG
+                      </span>
+                    </button>
+                  ) : (
+                    <div 
+                      title="Only AMC Admin can broadcast official escalation notices"
+                      className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 bg-slate-50 border border-dashed border-slate-200 cursor-not-allowed"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Official Broadcast (Admin Only)</span>
+                    </div>
+                  )}
+
                 </div>
 
                 <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400">
@@ -428,14 +627,26 @@ export default function App() {
 
               {/* Tab Content Display */}
               <div className="flex-1">
-                {activeTab === 'portal' ? (
-                  <CivicPortalTable tickets={dbState.complaints} />
-                ) : (
-                  <SocialEscalationDraft
-                    currentTicket={currentSelectedTicket || dbState.complaints[0]}
-                    uploadedImage={imagePreview}
-                    locality={selectedLocality}
+                {activeTab === 'area' ? (
+                  <AreaSituationView 
+                    onSelectAreaForUpload={(areaName) => {
+                      setSelectedLocality(areaName);
+                    }}
                   />
+                ) : activeTab === 'portal' ? (
+                  <CivicPortalTable 
+                    tickets={dbState.complaints} 
+                    isAdmin={isAdmin}
+                    onUpdateStatus={handleUpdateTicketStatus}
+                  />
+                ) : (
+                  isAdmin && (
+                    <SocialEscalationDraft
+                      currentTicket={currentSelectedTicket || dbState.complaints[0]}
+                      uploadedImage={imagePreview}
+                      locality={selectedLocality}
+                    />
+                  )
                 )}
               </div>
             </div>
@@ -453,7 +664,7 @@ export default function App() {
             <span>GDG Garbathone PS-01</span>
           </p>
           <p className="text-slate-400 text-[11px]">
-            Powered by Gemini 4 Argon • Google Maps Geocoding API • Firebase Cloud Firestore
+            Role-Based Access: Citizen (Situation & Uploads) | Admin (Comprehensive CRM & Broadcaster)
           </p>
         </div>
       </footer>
